@@ -66,12 +66,24 @@ class FreeDogs:
         url = f"https://api.freedogs.bot/miniapps/api/user/telegram_auth?invitationCode=oscKOfyL&initData={init_data}"
         try:
             response = requests.post(url, headers=self.headers)
-            if response.status_code == 200 and response.json().get("code") == 0:
-                return {"success": True, "data": response.json().get("data")}
+            
+            # Check if response is empty or not JSON
+            if response.status_code == 200:
+                try:
+                    response_json = response.json()
+                    if response_json.get("code") == 0:
+                        return {"success": True, "data": response_json.get("data")}
+                    else:
+                        return {"success": False, "error": response_json.get("msg")}
+                except ValueError:
+                    logger.error("Received non-JSON response or empty response.")
+                    logger.debug(f"Raw response: {response.text}")
+                    return {"success": False, "error": "Non-JSON response received"}
             else:
-                return {"success": False, "error": response.json().get("msg")}
+                return {"success": False, "error": f"Unexpected status code {response.status_code}"}
         except requests.RequestException as error:
             return {"success": False, "error": str(error)}
+
 
     def is_expired(self, token):
         """Check if a given JWT token is expired."""
