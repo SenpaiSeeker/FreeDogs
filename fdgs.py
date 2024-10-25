@@ -1,34 +1,10 @@
 import os
-import time
 import json
 import requests
 import logging
+from datetime import datetime, timedelta
 import hashlib
-from datetime import datetime
-
-
-def print_banner():
-    print("""
-▄▀█ █ █▀█ █▀▄ █▀█ █▀█ █▀█ ∞
-█▀█ █ █▀▄ █▄▀ █▀▄ █▄█ █▀▀   
-┏━┓ ┏━┓         ┏━┓ ╔═╗             ╔═╗ ┏━┓__            ┏━┓
-┃ ┃ ┃ ┃ ┏━╻━━━┓ ┃ ┃ ┏━┓ ┏━╻━━╻━━━━┓ ┏━┓ ┃ ┏━┛  ┏━━━━╮ ╭━━╹ ┃
-┃ ┗━┛ ┃ ┃ ┏━┓ ┃ ┃ ┃ ┃ ┃ ┃ ┏━┓ ┏━┓ ┃ ┃ ┃ ┃ ┗━━┓ ┃ ┏━━┛ ┃ ━━ ┃
-┗━━━ ━┛ ┗━┛ ┗━┛ ┗━┛ ┗━┛ ┗━┛ ┗━┛ ┗━┛ ┗━┛ ┗━━━━┛ ┗━━━━┛ ╰━━━━┛
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-               🐶  █▀ █▀█ █▀▀ █▀▀ █▀▄ █▀█ █▀▀ █▀ ▄▄ █▄▄ █▀█ ▀█▀
-                   █▀ █▀▄ ██▄ ██▄ █▄▀ █▄█ █▄█ ▄█ ░░ █▄█ █▄█ ░█░  
-  """)
-    print("==> 🟦 join channel : https://t.me/UNLXairdop")
-    print("==> 🟦 join chat : https://t.me/+aXm5TBeS-QMyMGZl")
-    print("==================================≠===============")
-    print("==> ⬛ github : https://github.com/Rextouin-R/")
-    print("====================================≠=============")
-
-
-# Konfigurasi logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-logger = logging.getLogger(__name__)
+import time
 
 class FreeDogs:
     def __init__(self):
@@ -47,70 +23,73 @@ class FreeDogs:
             "Sec-Fetch-Site": "same-site",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
         }
+        # Setup logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s | %(levelname)s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+        self.logger = logging.getLogger("FreeDogs")
 
     def countdown(self, seconds):
         for i in range(seconds, -1, -1):
-            print(f"Wait {i} seconds to continue the loop", end='\r')
+            print(f"\rWait {i} seconds to continue the loop", end="")
             time.sleep(1)
-        logger.info("")
+        print()  # Line break after countdown
 
     def call_api(self, init_data):
         url = f"https://api.freedogs.bot/miniapps/api/user/telegram_auth?invitationCode=oscKOfyL&initData={init_data}"
         try:
             response = requests.post(url, headers=self.headers)
-            response_data = response.json()
-            if response.status_code == 200 and response_data.get("code") == 0:
-                return {"success": True, "data": response_data.get("data")}
-            return {"success": False, "error": response_data.get("msg")}
-        except requests.RequestException as e:
-            return {"success": False, "error": str(e)}
+            response.raise_for_status()
+            data = response.json()
+            if data.get("code") == 0:
+                return {"success": True, "data": data["data"]}
+            else:
+                return {"success": False, "error": data.get("msg")}
+        except requests.RequestException as error:
+            return {"success": False, "error": str(error)}
 
     def is_expired(self, token):
-        header, payload, sign = token.split(".")
-        decoded_payload = json.loads(base64.urlsafe_b64decode(payload + '==').decode())
-        
         try:
-            exp_time = decoded_payload.get("exp")
-            now = int(datetime.now().timestamp())
-
-            if exp_time:
-                expiration_date = datetime.fromtimestamp(exp_time).strftime('%Y-%m-%d %H:%M:%S')
-                logger.info(f"Token expires on: {expiration_date}")
-                
-                is_expired = now > exp_time
-                logger.info(f"Has the token expired? {'Yes' if is_expired else 'No'}")
-                return is_expired
+            payload = token.split(".")[1]
+            decoded_payload = json.loads(
+                hashlib.base64.b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
+            )
+            exp = decoded_payload.get("exp")
+            if exp:
+                expiration_date = datetime.fromtimestamp(exp)
+                self.logger.info(f"Token expires on: {expiration_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                return datetime.now() > expiration_date
             else:
-                logger.warning("Perpetual token, expiration time cannot be read")
+                self.logger.warning("Perpetual token, expiration time cannot be read")
                 return False
         except Exception as e:
-            logger.error(f"Error: {str(e)}")
+            self.logger.error(f"Error: {e}")
             return True
 
     def get_game_info(self, token):
-        url = "https://api.freedogs.bot/miniapps/api/user_game_level/GetGameInfo?"
+        url = "https://api.freedogs.bot/miniapps/api/user_game_level/GetGameInfo"
         headers = {**self.headers, "Authorization": f"Bearer {token}"}
-
         try:
             response = requests.get(url, headers=headers)
-            response_data = response.json()
-            if response.status_code == 200 and response_data.get("code") == 0:
-                data = response_data.get("data")
-                logger.info(f"The current balance: {data.get('currentAmount')}")
-                logger.info(f"Coin Pool: {data.get('coinPoolLeft')}/{data.get('coinPoolLimit')}")
-                logger.info(f"Number of clicks today: {data.get('userToDayNowClick')}/{data.get('userToDayMaxClick')}")
-                return {"success": True, "data": data}
-            return {"success": False, "error": response_data.get("msg")}
-        except requests.RequestException as e:
-            return {"success": False, "error": str(e)}
+            response.raise_for_status()
+            data = response.json()
+            if data.get("code") == 0:
+                game_data = data["data"]
+                self.logger.info(f"The current balance: {game_data['currentAmount']}")
+                return {"success": True, "data": game_data}
+            else:
+                return {"success": False, "error": data.get("msg")}
+        except requests.RequestException as error:
+            return {"success": False, "error": str(error)}
 
-    def md5(self, input):
-        return hashlib.md5(input.encode()).hexdigest()
+    def md5(self, input_data):
+        return hashlib.md5(input_data.encode()).hexdigest()
 
     def collect_coin(self, token, game_info):
         url = "https://api.freedogs.bot/miniapps/api/user_game/collectCoin"
         headers = {**self.headers, "Authorization": f"Bearer {token}"}
-
         collect_amount = min(game_info["coinPoolLeft"], 10000 - game_info["userToDayNowClick"])
         collect_seq_no = int(game_info["collectSeqNo"])
         hash_code = self.md5(f"{collect_amount}{collect_seq_no}7be2a16a82054ee58398c5edb7ac4a5a")
@@ -123,63 +102,91 @@ class FreeDogs:
 
         try:
             response = requests.post(url, data=params, headers=headers)
-            response_data = response.json()
-            if response.status_code == 200 and response_data.get("code") == 0:
-                logger.info(f"Successfully collected {collect_amount} coins")
-                return {"success": True, "data": response_data.get("data")}
-            return {"success": False, "error": response_data.get("msg")}
-        except requests.RequestException as e:
-            return {"success": False, "error": str(e)}
+            response.raise_for_status()
+            data = response.json()
+            if data.get("code") == 0:
+                self.logger.info(f"Successfully collected {collect_amount} coins")
+                return {"success": True, "data": data["data"]}
+            else:
+                return {"success": False, "error": data.get("msg")}
+        except requests.RequestException as error:
+            return {"success": False, "error": str(error)}
+
+    def get_task_list(self, token):
+        url = "https://api.freedogs.bot/miniapps/api/task/lists"
+        headers = {**self.headers, "Authorization": f"Bearer {token}"}
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            if data.get("code") == 0:
+                tasks = [task for task in data["data"]["lists"] if task["isFinish"] == 0]
+                return {"success": True, "data": tasks}
+            else:
+                return {"success": False, "error": data.get("msg")}
+        except requests.RequestException as error:
+            return {"success": False, "error": str(error)}
+
+    def complete_task(self, token, task_id):
+        url = f"https://api.freedogs.bot/miniapps/api/task/finish_task?id={task_id}"
+        headers = {**self.headers, "Authorization": f"Bearer {token}"}
+        try:
+            response = requests.post(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return {"success": data.get("code") == 0}
+        except requests.RequestException as error:
+            return {"success": False, "error": str(error)}
 
     def process_tasks(self, token, user_id):
         task_list_result = self.get_task_list(token)
         if task_list_result["success"]:
             for task in task_list_result["data"]:
-                logger.info(f"Performing task: {task['name']}")
+                self.logger.info(f"Performing task: {task['name']}")
                 complete_result = self.complete_task(token, task["id"])
                 if complete_result["success"]:
-                    logger.info(f"Completed task {task['name']} successfully | Reward: {task['rewardParty']}")
+                    self.logger.info(f"Completed task {task['name']} successfully | Reward: {task['rewardParty']}")
                 else:
-                    logger.error(f"Cannot complete task {task['name']}: {complete_result['error']}")
+                    self.logger.error(f"Cannot complete task {task['name']}: {complete_result['error']}")
                 time.sleep(1)
         else:
-            logger.error(f"Unable to get task list for account {user_id}: {task_list_result['error']}")
+            self.logger.error(f"Unable to get task list for account {user_id}: {task_list_result['error']}")
 
     def main(self):
         data_file = "data.txt"
         token_file = "token.json"
-        
-        if os.path.exists(token_file):
-            with open(token_file, "r") as file:
-                tokens = json.load(file)
-        else:
-            tokens = {}
+        tokens = {}
 
-        with open(data_file, "r") as file:
-            data = [line.strip() for line in file if line.strip()]
-        
+        if os.path.exists(token_file):
+            with open(token_file, "r") as f:
+                tokens = json.load(f)
+
+        with open(data_file, "r") as f:
+            data = [line.strip() for line in f if line.strip()]
+
         while True:
             for i, raw_init_data in enumerate(data):
-                user_data = json.loads(raw_init_data)
-                user_id = user_data.get("id")
-                first_name = user_data.get("first_name")
+                init_data = raw_init_data.replace("&", "%26").replace("=", "%3D")
+                user_data_str = json.loads(init_data.split("user%3D")[1].split("%26")[0])
+                user_id = user_data_str["id"]
+                first_name = user_data_str["first_name"]
 
-                logger.info(f"Account {i + 1} | {first_name}")
+                self.logger.info(f"Account {i + 1} | {first_name}")
 
                 token = tokens.get(user_id)
-                need_new_token = not token or self.is_expired(token)
-
-                if need_new_token:
-                    logger.info(f"Need to get new token for account {user_id}...")
-                    api_result = self.call_api(raw_init_data)
+                if not token or self.is_expired(token):
+                    self.logger.info(f"Need to get new token for account {user_id}...")
+                    api_result = self.call_api(init_data)
 
                     if api_result["success"]:
+                        self.logger.info(f"Successfully obtained token for account {user_id}")
                         tokens[user_id] = api_result["data"]["token"]
-                        with open(token_file, "w") as file:
-                            json.dump(tokens, file, indent=2)
-                        logger.info(f"New token has been saved for account {user_id}")
+                        token = api_result["data"]["token"]
+                        with open(token_file, "w") as f:
+                            json.dump(tokens, f, indent=2)
+                        self.logger.info(f"New token has been saved for account {user_id}")
                     else:
-                        logger.error(f"Failed to get token for account {user_id}: {api_result['error']}")
+                        self.logger.error(f"Failed to get token for account {user_id}: {api_result['error']}")
                         continue
 
                 game_info_result = self.get_game_info(token)
@@ -187,16 +194,16 @@ class FreeDogs:
                     if game_info_result["data"]["coinPoolLeft"] > 0:
                         self.collect_coin(token, game_info_result["data"])
                     else:
-                        logger.warning(f"No coins to collect for account {user_id}")
+                        self.logger.warning(f"No coins to collect for account {user_id}")
 
                     self.process_tasks(token, user_id)
                 else:
-                    logger.error(f"Unable to get game information for account {user_id}: {game_info_result['error']}")
+                    self.logger.error(f"Unable to get game information for account {user_id}: {game_info_result['error']}")
 
                 time.sleep(1)
             self.countdown(167)
 
-print_banner()
+# Run the client
 if __name__ == "__main__":
     client = FreeDogs()
     client.main()
