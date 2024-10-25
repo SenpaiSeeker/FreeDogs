@@ -151,15 +151,21 @@ class FreeDogs:
         token_file = "token.json"
         tokens = {}
 
+        # Coba membaca token.json; jika kosong atau tidak valid, inisialisasi sebagai dictionary kosong
         if os.path.exists(token_file):
-            with open(token_file, "r") as file:
-                tokens = json.load(file)
+            try:
+                with open(token_file, "r") as file:
+                    tokens = json.load(file)
+            except json.JSONDecodeError:
+                logging.warning("token.json tidak valid, inisialisasi ulang sebagai dictionary kosong.")
+                tokens = {}
 
+        # Baca data dari data.txt
         if os.path.exists(data_file):
             with open(data_file, "r") as file:
                 data = [line.strip() for line in file if line.strip()]
         else:
-            logging.error("data.txt not found")
+            logging.error("data.txt tidak ditemukan")
             return
 
         while True:
@@ -201,7 +207,7 @@ class FreeDogs:
                     logging.error(f"Unable to get game information for account {user_id}: {game_info_result['error']}")
 
                 time.sleep(1)
-            self.countdown(165)
+            self.countdown(167)
 
 # Jalankan program utama
 if __name__ == "__main__":
