@@ -1,14 +1,24 @@
 import os
 import json
 import time
+import base64
 import requests
-import logging
 import hashlib
+import logging
 from datetime import datetime
 from dateutil import parser
 
+# Konfigurasi logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+logger = logging.getLogger(__name__)
+
 class FreeDogs:
     def __init__(self):
+        # Header yang sama persis dengan versi JavaScript
         self.headers = {
             "Accept": "application/json, text/plain, */*",
             "Accept-Encoding": "gzip, deflate, br",
@@ -25,12 +35,14 @@ class FreeDogs:
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
         }
 
+    # Metode untuk countdown timer
     def countdown(self, seconds):
         for i in range(seconds, -1, -1):
             print(f"Wait {i} seconds to continue the loop", end="\r")
             time.sleep(1)
-        logging.info("")
+        logger.info("")
 
+    # Panggil API dengan data inisialisasi
     def call_api(self, init_data):
         url = f"https://api.freedogs.bot/miniapps/api/user/telegram_auth?invitationCode=oscKOfyL&initData={init_data}"
         try:
@@ -43,25 +55,28 @@ class FreeDogs:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # Metode untuk memeriksa apakah token sudah kedaluwarsa
     def is_expired(self, token):
         try:
             header, payload, sign = token.split(".")
-            decoded_payload = json.loads(base64.urlsafe_b64decode(payload + "=="))
+            decoded_payload = base64.urlsafe_b64decode(payload + "==").decode()
+            payload_data = json.loads(decoded_payload)
             now = int(datetime.now().timestamp())
             
-            if "exp" in decoded_payload:
-                expiration_date = datetime.fromtimestamp(decoded_payload["exp"])
-                logging.info(f"Token expires on: {expiration_date.strftime('%Y-%m-%d %H:%M:%S')}")
-                is_expired = now > decoded_payload["exp"]
-                logging.info("Has the token expired? " + ("Yes, replace the token" if is_expired else "Not yet, continue"))
+            if "exp" in payload_data:
+                expiration_date = datetime.fromtimestamp(payload_data["exp"])
+                logger.info(f"Token expires on: {expiration_date.strftime('%Y-%m-%d %H:%M:%S')}")
+                is_expired = now > payload_data["exp"]
+                logger.info("Has the token expired? " + ("Yes, replace the token" if is_expired else "No, still valid"))
                 return is_expired
             else:
-                logging.warning("Perpetual token, no expiration time found")
+                logger.warning("Perpetual token, expiration not available.")
                 return False
         except Exception as e:
-            logging.error(f"Error: {str(e)}")
+            logger.error(f"Error checking token expiration: {str(e)}")
             return True
 
+    # Mendapatkan informasi permainan
     def get_game_info(self, token):
         url = "https://api.freedogs.bot/miniapps/api/user_game_level/GetGameInfo?"
         headers = {**self.headers, "Authorization": f"Bearer {token}"}
@@ -70,18 +85,20 @@ class FreeDogs:
             response_data = response.json()
             if response.status_code == 200 and response_data["code"] == 0:
                 data = response_data["data"]
-                logging.info(f"Current balance: {data['currentAmount']}")
-                logging.info(f"Coin Pool: {data['coinPoolLeft']}/{data['coinPoolLimit']}")
-                logging.info(f"Clicks today: {data['userToDayNowClick']}/{data['userToDayMaxClick']}")
+                logger.info(f"Current balance: {data['currentAmount']}")
+                logger.info(f"Coin Pool: {data['coinPoolLeft']}/{data['coinPoolLimit']}")
+                logger.info(f"Clicks today: {data['userToDayNowClick']}/{data['userToDayMaxClick']}")
                 return {"success": True, "data": data}
             else:
                 return {"success": False, "error": response_data.get("msg")}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # Hash menggunakan MD5
     def md5(self, input):
         return hashlib.md5(input.encode()).hexdigest()
 
+    # Mengumpulkan koin
     def collect_coin(self, token, game_info):
         url = "https://api.freedogs.bot/miniapps/api/user_game/collectCoin"
         headers = {**self.headers, "Authorization": f"Bearer {token}"}
@@ -98,13 +115,14 @@ class FreeDogs:
             response = requests.post(url, data=params, headers=headers)
             response_data = response.json()
             if response.status_code == 200 and response_data["code"] == 0:
-                logging.info(f"Successfully collected {collect_amount} coins")
+                logger.info(f"Successfully collected {collect_amount} coins")
                 return {"success": True, "data": response_data["data"]}
             else:
                 return {"success": False, "error": response_data.get("msg")}
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # Mendapatkan daftar tugas
     def get_task_list(self, token):
         url = "https://api.freedogs.bot/miniapps/api/task/lists?"
         headers = {**self.headers, "Authorization": f"Bearer {token}"}
@@ -119,6 +137,7 @@ class FreeDogs:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # Menyelesaikan tugas
     def complete_task(self, token, task_id):
         url = f"https://api.freedogs.bot/miniapps/api/task/finish_task?id={task_id}"
         headers = {**self.headers, "Authorization": f"Bearer {token}"}
@@ -132,32 +151,34 @@ class FreeDogs:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    # Menjalankan tugas-tugas dari daftar tugas
     def process_tasks(self, token, user_id):
         task_list_result = self.get_task_list(token)
         if task_list_result["success"]:
             for task in task_list_result["data"]:
-                logging.info(f"Performing task: {task['name']}")
+                logger.info(f"Performing task: {task['name']}")
                 complete_result = self.complete_task(token, task["id"])
                 if complete_result["success"]:
-                    logging.info(f"Completed task {task['name']} successfully | Reward: {task['rewardParty']}")
+                    logger.info(f"Completed task {task['name']} successfully | Reward: {task['rewardParty']}")
                 else:
-                    logging.error(f"Cannot complete task {task['name']}: {complete_result['error']}")
+                    logger.error(f"Cannot complete task {task['name']}: {complete_result['error']}")
                 time.sleep(1)
         else:
-            logging.error(f"Unable to get task list for account {user_id}: {task_list_result['error']}")
+            logger.error(f"Unable to get task list for account {user_id}: {task_list_result['error']}")
 
+    # Fungsi utama, mirip dengan yang di JavaScript
     def main(self):
         data_file = "data.txt"
         token_file = "token.json"
         tokens = {}
 
-        # Coba membaca token.json; jika kosong atau tidak valid, inisialisasi sebagai dictionary kosong
+        # Coba baca token.json; jika gagal, inisialisasi sebagai dictionary kosong
         if os.path.exists(token_file):
             try:
                 with open(token_file, "r") as file:
                     tokens = json.load(file)
             except json.JSONDecodeError:
-                logging.warning("token.json tidak valid, inisialisasi ulang sebagai dictionary kosong.")
+                logger.warning("token.json tidak valid, inisialisasi sebagai dictionary kosong.")
                 tokens = {}
 
         # Baca data dari data.txt
@@ -165,7 +186,7 @@ class FreeDogs:
             with open(data_file, "r") as file:
                 data = [line.strip() for line in file if line.strip()]
         else:
-            logging.error("data.txt tidak ditemukan")
+            logger.error("data.txt tidak ditemukan")
             return
 
         while True:
@@ -176,24 +197,24 @@ class FreeDogs:
                 user_id = user_data["id"]
                 first_name = user_data["first_name"]
 
-                logging.info(f"Account {i + 1} | {first_name}")
+                logger.info(f"Account {i + 1} | {first_name}")
 
                 token = tokens.get(user_id)
                 need_new_token = not token or self.is_expired(token)
 
                 if need_new_token:
-                    logging.info(f"Need new token for account {user_id}")
+                    logger.info(f"Need new token for account {user_id}")
                     api_result = self.call_api(init_data)
 
                     if api_result["success"]:
-                        logging.info(f"Obtained new token for account {user_id}")
+                        logger.info(f"Obtained new token for account {user_id}")
                         tokens[user_id] = api_result["data"]["token"]
                         token = api_result["data"]["token"]
                         with open(token_file, "w") as file:
                             json.dump(tokens, file, indent=2)
-                        logging.info(f"New token saved for account {user_id}")
+                        logger.info(f"New token saved for account {user_id}")
                     else:
-                        logging.error(f"Failed to get token for account {user_id}: {api_result['error']}")
+                        logger.error(f"Failed to get token for account {user_id}: {api_result['error']}")
                         continue
 
                 game_info_result = self.get_game_info(token)
@@ -201,10 +222,10 @@ class FreeDogs:
                     if game_info_result["data"]["coinPoolLeft"] > 0:
                         self.collect_coin(token, game_info_result["data"])
                     else:
-                        logging.warning(f"No coins to collect for account {user_id}")
+                        logger.warning(f"No coins to collect for account {user_id}")
                     self.process_tasks(token, user_id)
                 else:
-                    logging.error(f"Unable to get game information for account {user_id}: {game_info_result['error']}")
+                    logger.error(f"Unable to get game information for account {user_id}: {game_info_result['error']}")
 
                 time.sleep(1)
             self.countdown(167)
