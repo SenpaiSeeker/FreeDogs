@@ -12,7 +12,7 @@ from dateutil import parser
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%x %X"
 )
 logger = logging.getLogger(__name__)
 
@@ -172,16 +172,7 @@ class FreeDogs:
         token_file = "token.json"
         tokens = {}
 
-        # Coba baca token.json; jika gagal, inisialisasi sebagai dictionary kosong
-        if os.path.exists(token_file):
-            try:
-                with open(token_file, "r") as file:
-                    tokens = json.load(file)
-            except json.JSONDecodeError:
-                logger.warning("token.json tidak valid, inisialisasi sebagai dictionary kosong.")
-                tokens = {}
-
-        # Baca data dari data.txt
+        # Baca data dari data.txt dan inisialisasi token.json jika tidak ada atau kosong
         if os.path.exists(data_file):
             with open(data_file, "r") as file:
                 data = [line.strip() for line in file if line.strip()]
@@ -189,6 +180,30 @@ class FreeDogs:
             logger.error("data.txt tidak ditemukan")
             return
 
+        # Cek keberadaan token.json atau isi yang valid
+        if os.path.exists(token_file):
+            try:
+                with open(token_file, "r") as file:
+                    tokens = json.load(file)
+            except json.JSONDecodeError:
+                logger.warning("token.json tidak valid, menginisialisasi ulang dengan akun dari data.txt.")
+                tokens = {}
+
+        # Jika token.json kosong atau tidak ada data untuk user_id, inisialisasi dengan data.txt
+        for raw_init_data in data:
+            init_data = raw_init_data.replace("&", "%26").replace("=", "%3D")
+            user_data_str = init_data.split("user%3D")[1].split("%26")[0]
+            user_data = json.loads(requests.utils.unquote(user_data_str))
+            user_id = user_data["id"]
+            if user_id not in tokens:
+                tokens[user_id] = None  # Set token kosong sebagai placeholder
+
+        # Simpan inisialisasi token jika ada perubahan
+        with open(token_file, "w") as file:
+            json.dump(tokens, file, indent=2)
+            logger.info("Inisialisasi token.json dengan data dari data.txt selesai.")
+
+        # Mulai proses utama
         while True:
             for i, raw_init_data in enumerate(data):
                 init_data = raw_init_data.replace("&", "%26").replace("=", "%3D")
@@ -203,16 +218,16 @@ class FreeDogs:
                 need_new_token = not token or self.is_expired(token)
 
                 if need_new_token:
-                    logger.info(f"Need new token for account {user_id}")
+                    logger.info(f"Getting new token for account {user_id}")
                     api_result = self.call_api(init_data)
 
                     if api_result["success"]:
-                        logger.info(f"Obtained new token for account {user_id}")
+                        logger.info(f"Successfully obtained token for account {user_id}")
                         tokens[user_id] = api_result["data"]["token"]
                         token = api_result["data"]["token"]
                         with open(token_file, "w") as file:
                             json.dump(tokens, file, indent=2)
-                        logger.info(f"New token saved for account {user_id}")
+                        logger.info(f"Token saved for account {user_id}")
                     else:
                         logger.error(f"Failed to get token for account {user_id}: {api_result['error']}")
                         continue
